@@ -1,0 +1,10 @@
+Gerar léxico e sintático (já com a classe visitor):
+java -jar antlr/antlr-4.8.jar -visitor -o parser parser/lang.g4
+
+Compilar a main:
+Windows: javac -cp .;antlr/antlr-4.8.jar Teste.java
+Linux: javac -cp .:antlr/antlr-4.8.jar Teste.java
+
+Testar uma entrada:
+Windows: java -cp .;antlr/antlr-4.8.jar Teste exemplos/pasta/arquivo.lan
+Linux: java -cp .:antlr/antlr-4.8.jar Teste exemplos/pasta/arquivo.lan
