@@ -24,7 +24,7 @@ cmd : '{' cmd* '}'
     | ID '(' exps? ')' ( '<' lvalue ( ',' lvalue )* '>' )? ';' ;
 exp : exp '&&' exp
     | rexp ;
-rexp : aexp '<' aexp
+rexp : rexp '<' aexp
     | rexp '==' aexp
     | rexp '!=' aexp
     | aexp ;

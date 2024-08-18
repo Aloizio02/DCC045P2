@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Stack;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class Visitor extends langBaseVisitor<Object> {
     private Stack<HashMap<String,HashMap<String,Object>>> env = new Stack<>();
@@ -13,10 +14,10 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override
     public Object visitProg(langParser.ProgContext ctx) {
-        if (ctx.data() != null) {
+        if (ctx.data(0) != null) {
             return visitData(ctx.data(0));
         } 
-        if (ctx.func() != null) {
+        if (ctx.func(0) != null) {
             return visitFunc(ctx.func(0));
         }
         return null; 
@@ -36,10 +37,28 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitFunc(langParser.FuncContext ctx) {
-        System.out.println("teste");
-        /* 
+        HashMap<String, Object> varAux = new HashMap<>();
+        funcs.put(ctx.ID().getText(), varAux);
+        env.push(funcs);
+
+        if (ctx.cmd().size() > 0) {
+            for (int i = 0; i < ctx.cmd().size(); i++){
+                return visitCmd(ctx.cmd(i));
+            }
+        }
+
+        /*
+        //HashMap<String, Object> varAux = new HashMap<>();
+        //funcs.put(ctx.ID().getText(), varAux);
+        //env.push(funcs);
+        if (ctx.params(). == 0 && ctx.type().size() == 0) {
+            if (ctx.cmd() != null) {
+                for (int i = 0; i < ctx.cmd().size(); i++) {
+                    return visitCmd(ctx.cmd(i));
+                }
+            }
+        }
         HashMap<String,Object> operands = new HashMap<>();
-        funcs.put(ctx.ID().getText(), ctx);
         if (ctx.params() != null) {
             for(int i = 0; i < ctx.params().size(); i++){
                 operands.put(visitParams(ctx.params()).ID(), operands)
@@ -74,34 +93,108 @@ public class Visitor extends langBaseVisitor<Object> {
     }
 
 	@Override 
-    public Object visitCmd(langParser.CmdContext ctx) { 
-        if (ctx.lvalue() != null && ctx.ID() == null){
-            //return (visitLvalue(ctx.lvalue(0)), visitExp(ctx.exp(0)));
+    public Object visitCmd(langParser.CmdContext ctx) {
+        /*
+        if (ctx.lvalue() != null && ctx.exp() != null) {
+            HashMap<String, Object> variables = new HashMap<>();
+            HashMap<String,HashMap<String,Object>> envTop = env.peek();
+
+            for (int i = 0; i < ctx.lvalue().size(); i++) {
+                Object left = visitLvalue(ctx.lvalue(i));
+                Object right = visitExp(ctx.exp(i));
+                variables.put(left.toString(), right);
+                String key = getKey(envTop);
+                envTop.put(key, variables);
+            }
+            env.pop();
+            env.push(envTop);
+            return null;
+        }
+        */
+        if (ctx.getStart().getText().equals("print")) {
+            Object result = visitExp(ctx.exp(0));
+            System.out.println(result);
+            return result;
         }
         return null;
     }
 
 	@Override 
-    public Object visitExp(langParser.ExpContext ctx) { 
-        //return visitChildren(ctx); 
+    public Object visitExp(langParser.ExpContext ctx) {
+        if (ctx.exp().size() > 0) {
+            Object left = visitExp(ctx.exp(0));
+            Object right = visitExp(ctx.exp(1));
+
+            String operator = ctx.getStart().getText();
+            if (ctx.getChildCount() > 1) {
+                return ((Boolean) left).booleanValue() && ((Boolean) right).booleanValue();
+            }
+        } else if (ctx.rexp() != null) {
+            return visitRexp(ctx.rexp());
+        }
         return null;
     }
 
 	@Override 
-    public Object visitRexp(langParser.RexpContext ctx) { 
-        //return visitChildren(ctx); 
+    public Object visitRexp(langParser.RexpContext ctx) {
+        if (ctx.rexp() != null && ctx.aexp() != null) {
+            Object left  = visitRexp(ctx.rexp());
+            Object right = visitAexp(ctx.aexp());
+
+            String operator = ctx.getStart().getText();
+            if (ctx.getChildCount() > 1) {
+                if (ctx.getChild(1).getText().equals("<")) {
+                    return ((Number) left).doubleValue() < ((Number) right).doubleValue();
+                } else if (ctx.getChild(1).getText().equals("==")) {
+                    return ((Number) left).doubleValue() == ((Number) right).doubleValue();
+                } else if (ctx.getChild(1).getText().equals("!=")) {
+                    return ((Number) left).doubleValue() != ((Number) right).doubleValue();
+                }
+            }
+        } else if (ctx.aexp() != null) {
+            return visitAexp(ctx.aexp());
+        }
         return null;
     }
 
 	@Override 
-    public Object visitAexp(langParser.AexpContext ctx) { 
-        //return visitChildren(ctx); 
+    public Object visitAexp(langParser.AexpContext ctx) {
+        if (ctx.aexp() != null && ctx.mexp() != null) {
+            Object left = visitAexp(ctx.aexp());
+            Object right = visitMexp(ctx.mexp());
+
+            String operator = ctx.getStart().getText();
+            if (ctx.getChildCount() > 1) {
+                if (ctx.getChild(1).getText().equals("+")) {
+                    return ((Number) left).doubleValue() + ((Number) right).doubleValue();
+                } else if (ctx.getChild(1).getText().equals("-")) {
+                    return ((Number) left).doubleValue() - ((Number) right).doubleValue();
+                }
+            }
+        } else if (ctx.mexp() != null) {
+            return visitMexp(ctx.mexp());
+        }
         return null;
     }
 
 	@Override 
-    public Object visitMexp(langParser.MexpContext ctx) { 
-        //return visitChildren(ctx); 
+    public Object visitMexp(langParser.MexpContext ctx) {
+        if (ctx.mexp() != null && ctx.sexp() != null) {
+            Object left = visitMexp(ctx.mexp());
+            Object right = visitSexp(ctx.sexp());
+            String operator = ctx.getStart().getText();
+            if (ctx.getChildCount() > 1) {
+                if (ctx.getChild(1).getText().equals("*")) {
+                    return ((Number) left).doubleValue() * ((Number) right).doubleValue();
+                } else if (ctx.getChild(1).getText().equals("/")) {
+                    return ((Number) left).doubleValue() / ((Number) right).doubleValue();
+                } else if (ctx.getChild(1).getText().equals("%")) {
+                    return ((Number) left).doubleValue() % ((Number) right).doubleValue();
+                }
+            }
+        } else if (ctx.mexp() == null) {
+            return visitSexp(ctx.sexp());
+        }
         return null;
     }
 
@@ -136,22 +229,21 @@ public class Visitor extends langBaseVisitor<Object> {
         if (ctx.type() != null) {
             String typeName = ctx.type().getText();
             Object size = visitExp(ctx.exp());
-
+    
             if (size instanceof Integer){
-                if (typeName == "Int") {
+                if (typeName.equals("Int")) {
                     return new int[(Integer) size];
                 }
-                if (typeName == "Float") {
+                if (typeName.equals("Float")) {
                     return new float[(Integer) size];
                 }
-                if (typeName == "Char") {
+                if (typeName.equals("Char")) {
                     return new char[(Integer) size];
                 }
-                if (typeName == "Bool") {
+                if (typeName.equals("Bool")) {
                     return new boolean[(Integer) size];
                 } else {
-                    Class<?> clazz = Class.forName(typeName);
-                    return java.lang.reflect.Array.newInstance(clazz, (Integer) size);
+
                 }
             }
             return null;
@@ -160,7 +252,6 @@ public class Visitor extends langBaseVisitor<Object> {
             return visitExp(ctx.exp());
         }
         if (ctx.ID() != null) {
-            visitFunc(ctx.ID().func);
             return null;
         }
         return null;
@@ -168,15 +259,18 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitLvalue(langParser.LvalueContext ctx) {
-        if (ctx.ID() != null && ctx.exp() == null && ctx.lvalue() == null) {
+        if (ctx.lvalue() != null){
+            if (ctx.exp() != null) {
+                // pensar na implementação
+            } else if (ctx.ID() != null) {
+                // pensar implementação
+            }
+        } else if (ctx.ID() != null) {
+            //if (seeksAssociatedValue(ctx.ID().getText()) != null){
+            //    return seeksAssociatedValue(ctx.ID().getText());
+            //}
             return ctx.ID().getText();
         }
-        if (ctx.lvalue() != null && ctx.exp() != null) {
-            return null; // pensar implementação
-        }
-        if (ctx.lvalue() != null && ctx.ID() != null) {
-            return null; // pensar implementação
-        } 
         return null;
     }
 
@@ -189,5 +283,20 @@ public class Visitor extends langBaseVisitor<Object> {
             results.add(visitExp(ctx.exp(i)));
         }
         return results;
+    }
+
+    public Object seeksAssociatedValue(String key) {
+        HashMap<String,HashMap<String,Object>> envTop = env.peek();
+        System.out.println(envTop);
+        String keyClass = getKey(envTop);
+        HashMap<String,Object> hash = envTop.get(keyClass);
+        return hash.get(key);
+    }
+
+    public String getKey(HashMap<String, HashMap<String, Object>> map) {
+        if (map != null && !map.isEmpty()) {
+            return map.keySet().iterator().next();
+        }
+        return null;
     }
 }
