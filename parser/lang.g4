@@ -6,7 +6,7 @@ package parser;
 package parser;
 }
 
-prog : data* | func+ ;
+prog : data* func+ ;
 data : 'data' TYPE '{' decl* '}' ;
 decl : ID '::' type ';' ;
 func : ID '(' params? ')' ( ':' type ( ',' type )* )? '{' cmd* '}' ;
@@ -44,7 +44,7 @@ sexp : '!' pexp
     | pexp ;
 pexp : lvalue
     | '(' exp ')'
-    | 'new' type '[' exp ']'
+    | 'new' type ('[' exp ']')?
     | ID '(' exps? ')' '[' exp ']' ;
 lvalue : ID
     | lvalue '[' exp ']'

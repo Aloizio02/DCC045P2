@@ -13,31 +13,44 @@ public class Visitor extends langBaseVisitor<Object> {
     private Stack<HashMap<String,HashMap<String,Object>>> env = new Stack<>();
     private HashMap<String,HashMap<String,Object>> funcs = new HashMap<>();
     private HashMap<String,Object> vars = new HashMap<>();
+    private HashMap<String,HashMap<String,Object>> datas = new HashMap<>();
+    private HashMap<String,Object> decls = new HashMap<>();
 
 	@Override
     public Object visitProg(langParser.ProgContext ctx) {
         if (ctx.data().size() > 0) {
-            for(int i = 0; i < ctx.data().size(); i++) {
-                return visitData(ctx.data(i));
+            for (int i = 0; i < ctx.data().size(); i++) {
+                visitData(ctx.data(i));
             }
         } 
+        
         if (ctx.func().size() > 0) {
-            for (int i = 0; i < ctx.func().size(); i++){
-                return visitFunc(ctx.func(i));
+            for (int i = 0; i < ctx.func().size(); i++) {
+                visitFunc(ctx.func(i));
             }
         }
         return null; 
     }
 
 	@Override 
-    public Object visitData(langParser.DataContext ctx) { 
-        //return visitChildren(ctx);
+    public Object visitData(langParser.DataContext ctx) {
+        decls.clear();
+        datas.put(ctx.TYPE().getText(), decls);
+        if (ctx.decl().size() > 0) {
+            for (int i = 0; i < ctx.decl().size(); i++){
+                visitDecl(ctx.decl(i));
+            }
+        }
         return null;
     }
 
 	@Override 
     public Object visitDecl(langParser.DeclContext ctx) { 
-        //return visitChildren(ctx);
+        String data = ctx.ID().getText();
+        Object decl = visitType(ctx.type());
+        decls.put(data, decl);
+        String key = getKey(datas);
+        datas.put(key, decls);
         return null; 
     }
 
@@ -52,31 +65,6 @@ public class Visitor extends langBaseVisitor<Object> {
                 visitCmd(ctx.cmd(i));
             }
         }
-
-        /*
-        //HashMap<String, Object> varAux = new HashMap<>();
-        //funcs.put(ctx.ID().getText(), varAux);
-        //env.push(funcs);
-        if (ctx.params(). == 0 && ctx.type().size() == 0) {
-            if (ctx.cmd() != null) {
-                for (int i = 0; i < ctx.cmd().size(); i++) {
-                    return visitCmd(ctx.cmd(i));
-                }
-            }
-        }
-        HashMap<String,Object> operands = new HashMap<>();
-        if (ctx.params() != null) {
-            for(int i = 0; i < ctx.params().size(); i++){
-                operands.put(visitParams(ctx.params()).ID(), operands)
-                funcs.put(ctx.ID().getText(), );
-                return visitParams(ctx.params(i));
-            }
-        }
-        for(int i = 0; i < ctx.cmd().size(); i++){
-            operands.push(visitCmd(ctx.cmd(i)));
-        }
-        env.pop();
-        */
         return null;
     }
 
@@ -88,13 +76,25 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitType(langParser.TypeContext ctx) { 
-        //return visitChildren(ctx); 
+        if (ctx.btype() != null) {
+            return visitBtype(ctx.btype());
+        }
         return null;
     }
 
 	@Override 
     public Object visitBtype(langParser.BtypeContext ctx) { 
-        //return visitChildren(ctx); 
+        if (ctx.getStart().getText().equals("Int")){
+            return "Int";
+        } else if (ctx.getStart().getText().equals("Float")) {
+            return "Float";
+        } else if (ctx.getStart().getText().equals("Bool")) {
+            return "Bool";
+        } else if (ctx.getStart().getText().equals("Char")) {
+            return "Char";
+        } else if (ctx.TYPE() != null) {
+            return ctx.TYPE().getText();
+        }
         return null;
     }
 
@@ -183,6 +183,9 @@ public class Visitor extends langBaseVisitor<Object> {
                     env.pop();
                     env.push(funcs);
                 }
+            } else if (left.contains(".")) {
+                // implementar o caso de tipo
+                System.out.println(left);
             } else {
                 if (vars.get(right.toString()) == null){
                     vars.put(left, right);
@@ -322,24 +325,22 @@ public class Visitor extends langBaseVisitor<Object> {
         } else if (ctx.type() == null && ctx.ID() == null && ctx.exp() != null) {
             return visitExp(ctx.exp());
         } else if (ctx.type() != null) {
-            String typeName = ctx.type().getText();
-            Object size = visitExp(ctx.exp());
-    
-            if (size instanceof Integer){
-                if (typeName.equals("Int")) {
-                    return new int[(Integer) size];
+            String typeName = visitType(ctx.type()).toString();
+            if (datas.get(typeName) == null) {
+                Object size = visitExp(ctx.exp());
+                if (size instanceof Integer){
+                    if (typeName.equals("Int")) {
+                        return new int[(Integer) size];
+                    } else if (typeName.equals("Float")) {
+                        return new float[(Integer) size];
+                    } else if (typeName.equals("Char")) {
+                        return new char[(Integer) size];
+                    } else if (typeName.equals("Bool")) {
+                        return new boolean[(Integer) size];
+                    }
                 }
-                if (typeName.equals("Float")) {
-                    return new float[(Integer) size];
-                }
-                if (typeName.equals("Char")) {
-                    return new char[(Integer) size];
-                }
-                if (typeName.equals("Bool")) {
-                    return new boolean[(Integer) size];
-                } else {
-
-                }
+            } else {
+                return typeName;
             }
         } else if (ctx.ID() != null) {
             return null;
@@ -349,7 +350,7 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitLvalue(langParser.LvalueContext ctx) {
-        if (ctx.ID() != null) {
+        if (ctx.lvalue() == null && ctx.ID() != null) {
             return ctx.ID().getText();
         } else if (ctx.lvalue() != null && ctx.exp() != null) {
             Object varAux = vars.get(ctx.lvalue().getText());
@@ -375,6 +376,8 @@ public class Visitor extends langBaseVisitor<Object> {
                 }
             }
             return ctx.lvalue().getText() + "[" + ctx.exp().getText() + "]";
+        } else if (ctx.lvalue() != null && ctx.ID() != null) {
+            return ctx.lvalue().getText() + "." + ctx.ID().getText();
         }
         return null;
     }
