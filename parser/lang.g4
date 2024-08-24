@@ -35,8 +35,7 @@ mexp : mexp '*' sexp
     | mexp '/' sexp
     | mexp '%' sexp
     | sexp ;
-sexp : '!' sexp
-    | '-' sexp
+sexp : '!' pexp
     | BOOL
     | NULL
     | INT
@@ -60,7 +59,7 @@ ID : [a-z][a-zA-Z0-9_]*;
 TYPE: [A-Z][a-zA-Z0-9_]*;
 INT : [0-9]+;
 FLOAT: INT* '.' INT+;
-CHAR: '\'' ( '\\' . | ~['\\'] ) '\'';
+CHAR: '\'' ( '\\' . | . ) '\'';
 NEWLINE: '\r' ? '\n' -> skip;
 WS : [ \t\r\n]+ -> skip;
 LINE_COMMENT: '--' ~('\r' | '\n')* NEWLINE -> skip;

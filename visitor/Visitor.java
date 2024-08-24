@@ -7,6 +7,7 @@ import java.util.Stack;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 
 public class Visitor extends langBaseVisitor<Object> {
     private Stack<HashMap<String,HashMap<String,Object>>> env = new Stack<>();
@@ -15,11 +16,15 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override
     public Object visitProg(langParser.ProgContext ctx) {
-        if (ctx.data(0) != null) {
-            return visitData(ctx.data(0));
+        if (ctx.data().size() > 0) {
+            for(int i = 0; i < ctx.data().size(); i++) {
+                return visitData(ctx.data(i));
+            }
         } 
-        if (ctx.func(0) != null) {
-            return visitFunc(ctx.func(0));
+        if (ctx.func().size() > 0) {
+            for (int i = 0; i < ctx.func().size(); i++){
+                return visitFunc(ctx.func(i));
+            }
         }
         return null; 
     }
@@ -38,8 +43,8 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitFunc(langParser.FuncContext ctx) {
-        HashMap<String, Object> varAux = new HashMap<>();
-        funcs.put(ctx.ID().getText(), varAux);
+        vars.clear();
+        funcs.put(ctx.ID().getText(), vars);
         env.push(funcs);
 
         if (ctx.cmd().size() > 0) {
@@ -95,10 +100,19 @@ public class Visitor extends langBaseVisitor<Object> {
 
 	@Override 
     public Object visitCmd(langParser.CmdContext ctx) {
-        //System.out.println(ctx.cmd().size());
         if (ctx.getStart().getText().equals("print") && ctx.exp() != null) {
             Object result = visitExp(ctx.exp(0));
-            System.out.println(result);
+            if (vars.get(result.toString()) == null){
+                System.out.println(result);
+            } else {
+                System.out.println(vars.get(result.toString()));
+            }
+        } else if (ctx.getStart().getText().equals("{")) {
+            if (ctx.cmd().size() > 0) {
+                for (int i = 0; i < ctx.cmd().size(); i++) {
+                    visitCmd(ctx.cmd(i));
+                }
+            }
         } else if (ctx.getStart().getText().equals("if") && ctx.cmd().size() == 1){
             boolean result = (Boolean)visitExp(ctx.exp(0));
             if (result) {
@@ -111,14 +125,77 @@ public class Visitor extends langBaseVisitor<Object> {
             } else {
                 visitCmd(ctx.cmd(1));
             }
+        } else if (ctx.getStart().getText().equals("iterate") && ctx.exp() != null) {
+            Object exp = visitExp(ctx.exp(0));
+            if (vars.get(exp.toString()) == null){
+                int auxExp = Integer.parseInt(exp.toString());
+                for(int i = 0; i < auxExp; i++){
+                    visitCmd(ctx.cmd(0));
+                }
+            } else {
+                String auxExp = vars.get(exp.toString()).toString();
+                for(int i = 0; i < Integer.parseInt(auxExp); i++){
+                    visitCmd(ctx.cmd(0));
+                }
+            }
+        } else if (ctx.getStart().getText().equals("read") && ctx.lvalue() != null) {
+            String varName = visitLvalue(ctx.lvalue(0)).toString();
+            Object value = receivesUserInput();
+            String key  = getKey(funcs);
+            vars.put(varName, value);
+            funcs.put(key, vars);
+            env.pop();
+            env.push(funcs);
         } else if (ctx.lvalue() != null && ctx.exp() != null) {
             String left = visitLvalue(ctx.lvalue(0)).toString();
             Object right = visitExp(ctx.exp(0));
             String key = getKey(funcs);
-            vars.put(left, right);
-            funcs.put(key, vars);
-            env.pop();
-            env.push(funcs);
+            if (left.contains("[")) {
+                String keyVar = left.substring(0, left.indexOf("["));
+                int index = Integer.parseInt(left.substring(left.indexOf("[") + 1, left.indexOf("]")));
+                Object varAux = vars.get(keyVar);
+                if (varAux instanceof int[]) {
+                    int[] vectAux = (int[]) varAux;
+                    vectAux[index] = Integer.parseInt(right.toString());
+                    vars.put(keyVar, vectAux);
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                } else if (varAux instanceof float[]) {
+                    float[] vectAux = (float[]) varAux;
+                    vectAux[index] = Float.parseFloat(right.toString());
+                    vars.put(keyVar, vectAux);
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                } else if (varAux instanceof boolean[]) {
+                    boolean[] vectAux = (boolean[]) varAux;
+                    vectAux[index] = Boolean.parseBoolean(right.toString());
+                    vars.put(keyVar, vectAux);
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                } else if (varAux instanceof char[]) {
+                    char[] vectAux = (char[]) varAux;
+                    vectAux[index] = right.toString().charAt(0);
+                    vars.put(keyVar, vectAux);
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                }
+            } else {
+                if (vars.get(right.toString()) == null){
+                    vars.put(left, right);
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                } else {
+                    vars.put(left, vars.get(right.toString()));
+                    funcs.put(key, vars);
+                    env.pop();
+                    env.push(funcs);
+                }
+            }
         }
         return null;
     }
@@ -129,7 +206,6 @@ public class Visitor extends langBaseVisitor<Object> {
             Object left = visitExp(ctx.exp(0));
             Object right = visitExp(ctx.exp(1));
 
-            String operator = ctx.getStart().getText();
             if (ctx.getChildCount() > 1) {
                 return ((Boolean) left).booleanValue() && ((Boolean) right).booleanValue();
             }
@@ -145,7 +221,12 @@ public class Visitor extends langBaseVisitor<Object> {
             Object left  = visitRexp(ctx.rexp());
             Object right = visitAexp(ctx.aexp());
 
-            String operator = ctx.getStart().getText();
+            if (vars.get(left.toString()) != null){
+                left = vars.get(left.toString());
+            }
+            if (vars.get(right.toString()) != null){
+                right = vars.get(right.toString());
+            }
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("<")) {
                     return ((Number) left).doubleValue() < ((Number) right).doubleValue();
@@ -167,7 +248,12 @@ public class Visitor extends langBaseVisitor<Object> {
             Object left = visitAexp(ctx.aexp());
             Object right = visitMexp(ctx.mexp());
 
-            String operator = ctx.getStart().getText();
+            if (vars.get(left.toString()) != null){
+                left = vars.get(left.toString());
+            }
+            if (vars.get(right.toString()) != null){
+                right = vars.get(right.toString());
+            }
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("+")) {
                     return ((Number) left).doubleValue() + ((Number) right).doubleValue();
@@ -186,7 +272,12 @@ public class Visitor extends langBaseVisitor<Object> {
         if (ctx.mexp() != null && ctx.sexp() != null) {
             Object left = visitMexp(ctx.mexp());
             Object right = visitSexp(ctx.sexp());
-            String operator = ctx.getStart().getText();
+            if (vars.get(left.toString()) != null){
+                left = vars.get(left.toString());
+            }
+            if (vars.get(right.toString()) != null){
+                right = vars.get(right.toString());
+            }
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("*")) {
                     return ((Number) left).doubleValue() * ((Number) right).doubleValue();
@@ -206,22 +297,21 @@ public class Visitor extends langBaseVisitor<Object> {
     public Object visitSexp(langParser.SexpContext ctx) {
         if (ctx.INT() != null) {
             return Integer.parseInt(ctx.INT().getText());
-        }
-        if (ctx.FLOAT() != null) {
+        } else if (ctx.FLOAT() != null) {
             return Float.parseFloat(ctx.FLOAT().getText());
-        }
-        if (ctx.BOOL() != null) {
+        } else if (ctx.BOOL() != null) {
             return Boolean.parseBoolean(ctx.BOOL().getText());
-        }
-        if (ctx.NULL() != null) {
+        } else if (ctx.NULL() != null) {
             return null;
-        }
-        if (ctx.CHAR() != null) {
-            return ctx.CHAR().getText().charAt(0);
-        }
-        if (ctx.pexp() != null) {
+        } else if (ctx.CHAR() != null) {
+            return ctx.CHAR().getText().charAt(1);
+        } else if (ctx.getStart().getText().equals("!") && ctx.pexp() != null) {
+            boolean result = (Boolean)visitPexp(ctx.pexp());
+            return !result;
+        } else if (ctx.pexp() != null) {
             return visitPexp(ctx.pexp());
         }
+        // pensar na necessidade de implementar o menos unário (regra '| '-' pexp' em sexp)
         return null;
     }
 
@@ -229,8 +319,9 @@ public class Visitor extends langBaseVisitor<Object> {
     public Object visitPexp(langParser.PexpContext ctx) { 
         if (ctx.lvalue() != null){
             return visitLvalue(ctx.lvalue());
-        }
-        if (ctx.type() != null) {
+        } else if (ctx.type() == null && ctx.ID() == null && ctx.exp() != null) {
+            return visitExp(ctx.exp());
+        } else if (ctx.type() != null) {
             String typeName = ctx.type().getText();
             Object size = visitExp(ctx.exp());
     
@@ -250,12 +341,7 @@ public class Visitor extends langBaseVisitor<Object> {
 
                 }
             }
-            return null;
-        }
-        if (ctx.exp() != null && ctx.type() == null) {
-            return visitExp(ctx.exp());
-        }
-        if (ctx.ID() != null) {
+        } else if (ctx.ID() != null) {
             return null;
         }
         return null;
@@ -264,10 +350,31 @@ public class Visitor extends langBaseVisitor<Object> {
 	@Override 
     public Object visitLvalue(langParser.LvalueContext ctx) {
         if (ctx.ID() != null) {
-            if(vars.get(ctx.ID().getText()) == null){
-                return ctx.ID().getText();
+            return ctx.ID().getText();
+        } else if (ctx.lvalue() != null && ctx.exp() != null) {
+            Object varAux = vars.get(ctx.lvalue().getText());
+            if (varAux instanceof int[]) {
+                int[] aux = (int []) varAux;
+                if (aux[Integer.parseInt(ctx.exp().getText())] != 0){
+                    return aux[Integer.parseInt(ctx.exp().getText())];
+                }
+            } else if (varAux instanceof float[]) {
+                float[] aux = (float []) varAux;
+                if (aux[Integer.parseInt(ctx.exp().getText())] != 0){
+                    return aux[Integer.parseInt(ctx.exp().getText())];
+                }
+            } else if (varAux instanceof boolean[]){
+                boolean[] aux = (boolean []) varAux;
+                if (aux[Integer.parseInt(ctx.exp().getText())]){
+                    return aux[Integer.parseInt(ctx.exp().getText())];
+                }
+            } else if (varAux instanceof char[]) {
+                char[] aux = (char []) varAux;
+                if (aux[Integer.parseInt(ctx.exp().getText())] != '\0'){
+                    return aux[Integer.parseInt(ctx.exp().getText())];
+                }
             }
-            return vars.get(ctx.ID().getText());
+            return ctx.lvalue().getText() + "[" + ctx.exp().getText() + "]";
         }
         return null;
     }
@@ -283,10 +390,36 @@ public class Visitor extends langBaseVisitor<Object> {
         return results;
     }
 
+    // Função para retornar a chave da Hash 'funcs' (será útil na manipulação da Hash e pilha)
     public String getKey(HashMap<String, HashMap<String, Object>> map) {
         if (map != null && !map.isEmpty()) {
             return map.keySet().iterator().next();
         }
         return null;
+    }
+
+    // Função para ler entrada do usuário e converter para uma das possíveis entradas da linguagem (int, float ou boolean)
+    public Object receivesUserInput() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("");
+        String value = scanner.nextLine();
+        scanner.close();
+        try {
+            int intInput = Integer.parseInt(value);
+            return intInput;
+        } catch (NumberFormatException e1) {
+            try {
+                float floatInput = Float.parseFloat(value);
+                return floatInput;
+            } catch (NumberFormatException e2) {
+                if (value.equals("true") ||value.equals("false")) {
+                    boolean boolInput = Boolean.parseBoolean(value);
+                    return boolInput;
+                } else {
+                    System.out.println("Entrada informada pelo usuario foi invalida!");
+                    return null;
+                }
+            }
+        }
     }
 }
