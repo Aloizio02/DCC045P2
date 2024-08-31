@@ -1,5 +1,5 @@
 import parser.*;
-import visitor.*;
+import visitors.*;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 
@@ -14,7 +14,7 @@ public class Teste{
         langParser.ProgContext progContext = parser.prog(); // Obtém o ProgContext
         //System.out.println(progContext.toStringTree(parser)); // Para depuração
 
-        Visitor visitor = new Visitor();
+        InterpretVisitor visitor = new InterpretVisitor();
         visitor.visitProg(progContext); // Chama visitProg diretamente
     }
 }

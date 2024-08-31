@@ -8,3 +8,6 @@ Linux: javac -cp .:antlr/antlr-4.8.jar Teste.java
 Testar uma entrada:
 Windows: java -cp .;antlr/antlr-4.8.jar Teste exemplos/pasta/arquivo.lan
 Linux: java -cp .:antlr/antlr-4.8.jar Teste exemplos/pasta/arquivo.lan
+
+Testar entradas em lote:
+Windows: java -cp .;antlr/antlr-4.8.jar LangCompiler exemplos/sintaxe/certo

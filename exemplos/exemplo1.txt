@@ -1,3 +1,12 @@
-main () {
-    print 2 < 3 && 5 == 5;
+data Ponto {
+   x :: Float;
+   y :: Float;
+}
+
+main(l :: Int){
+   p = new Ponto;
+   z = new Int[][2*2];
+   z[0] = new Int[10];
+   wrong = new Int;
+   print p.x;
 }
