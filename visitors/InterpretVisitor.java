@@ -261,7 +261,13 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 // Se o nome da variável contém '[]', trata como um acesso a array
                 if (left.contains("[")) {
                     String keyVar = left.substring(0, left.indexOf("["));
-                    int index = Integer.parseInt(left.substring(left.indexOf("[") + 1, left.indexOf("]")));
+                    int index;
+                    Object auxIndex = left.substring(left.indexOf("[") + 1, left.indexOf("]"));
+                    if(vars.get(auxIndex.toString()) == null){
+                        index = Integer.parseInt(auxIndex.toString());
+                    } else {
+                        index = Integer.parseInt(vars.get(auxIndex).toString());
+                    }
                     Object varAux = vars.get(keyVar);
                     // Tratamento específico para arrays de diferentes tipos (int, float, boolean, char)
                     if (varAux instanceof int[]) {
@@ -376,11 +382,31 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             // Realiza operações relacionais de comparação
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("<")) {
-                    return ((Number) left).doubleValue() < ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) < Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) < Float.parseFloat(right.toString());
+                    }
                 } else if (ctx.getChild(1).getText().equals("==")) {
-                    return ((Number) left).doubleValue() == ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) == Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) == Float.parseFloat(right.toString());
+                    } else if (left instanceof Boolean && right instanceof Boolean){
+                        return Boolean.parseBoolean(left.toString()) == Boolean.parseBoolean(right.toString());
+                    } else if (left instanceof Character && right instanceof Character){
+                        return left.toString().charAt(1) == right.toString().charAt(1); 
+                    }
                 } else if (ctx.getChild(1).getText().equals("!=")) {
-                    return ((Number) left).doubleValue() != ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) != Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) != Float.parseFloat(right.toString());
+                    } else if (left instanceof Boolean && right instanceof Boolean){
+                        return Boolean.parseBoolean(left.toString()) != Boolean.parseBoolean(right.toString());
+                    } else if (left instanceof Character && right instanceof Character){
+                        return left.toString().charAt(1) != right.toString().charAt(1); 
+                    }
                 }
             }
         } else if (ctx.aexp() != null) {
@@ -407,9 +433,17 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             // Realiza operações aritméticas de soma ou subtração
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("+")) {
-                    return ((Number) left).doubleValue() + ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) + Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) + Float.parseFloat(right.toString());
+                    }
                 } else if (ctx.getChild(1).getText().equals("-")) {
-                    return ((Number) left).doubleValue() - ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) - Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) - Float.parseFloat(right.toString());
+                    }
                 }
             }
         } else if (ctx.mexp() != null) {
@@ -435,11 +469,23 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             // Realiza operações de multiplicação, divisão ou módulo
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("*")) {
-                    return ((Number) left).doubleValue() * ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) * Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) * Float.parseFloat(right.toString());
+                    }
                 } else if (ctx.getChild(1).getText().equals("/")) {
-                    return ((Number) left).doubleValue() / ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) / Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) / Float.parseFloat(right.toString());
+                    }
                 } else if (ctx.getChild(1).getText().equals("%")) {
-                    return ((Number) left).doubleValue() % ((Number) right).doubleValue();
+                    if (left instanceof Integer && right instanceof Integer){
+                        return Integer.parseInt(left.toString()) % Integer.parseInt(right.toString());
+                    } else if (left instanceof Float && right instanceof Float) {
+                        return Float.parseFloat(left.toString()) % Float.parseFloat(right.toString());
+                    }
                 }
             }
         } else if (ctx.mexp() == null) {
@@ -544,7 +590,11 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 for (int i = 0; i < auxParams.size(); i++){
                     String keyParams = funcs.get(ctx.ID().toString()).keySet().iterator().next();
                     HashMap<String,Object> newValParam = funcs.get(ctx.ID().toString());
-                    newValParam.put(keyParams, vars.get(auxParams.get(i)));
+                    if(vars.get(auxParams.get(i)) != null){
+                        newValParam.put(keyParams, vars.get(auxParams.get(i)));
+                    } else {
+                        newValParam.put(keyParams, auxParams.get(i));
+                    }
                     funcs.put(ctx.ID().toString(), (HashMap<String,Object>)newValParam.clone());
                 }
                 vars.clear();
@@ -564,6 +614,9 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
     public Object visitLvalue(langParser.LvalueContext ctx) {
         // Se o contexto 'lvalue' não é nulo e há um identificador, retorna o nome do identificador
         if (ctx.lvalue() == null && ctx.ID() != null) {
+            if(vars.get(ctx.ID().toString()) != null){
+                return vars.get(ctx.ID().toString());
+            }
             return ctx.ID().getText();
         } 
         // Se o contexto 'lvalue' e uma expressão estão presentes, processa o acesso a elementos de um array
@@ -573,22 +626,28 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             // Verifica se o 'lvalue' é um array de inteiros e acessa o elemento do índice especificado
             if (varAux instanceof int[]) {
                 int[] aux = (int []) varAux;
-                if (aux[Integer.parseInt(ctx.exp().getText())] != 0){
-                    return aux[Integer.parseInt(ctx.exp().getText())];
+                if (visitExp(ctx.exp()).getClass().getSimpleName().equals("Integer")){
+                    return aux[Integer.parseInt(visitExp(ctx.exp()).toString())];
+                } else {
+                    return aux[Integer.parseInt(vars.get(visitExp(ctx.exp()).toString()).toString())];
                 }
             } 
             // Verifica se o 'lvalue' é um array de floats e acessa o elemento do índice especificado
             else if (varAux instanceof float[]) {
                 float[] aux = (float []) varAux;
-                if (aux[Integer.parseInt(ctx.exp().getText())] != 0){
-                    return aux[Integer.parseInt(ctx.exp().getText())];
+                if (visitExp(ctx.exp()).getClass().getSimpleName().equals("Integer")){
+                    return aux[Integer.parseInt(visitExp(ctx.exp()).toString())];
+                } else {
+                    return aux[Integer.parseInt(vars.get(visitExp(ctx.exp()).toString()).toString())];
                 }
             } 
             // Verifica se o 'lvalue' é um array de booleanos e acessa o elemento do índice especificado
             else if (varAux instanceof boolean[]){
                 boolean[] aux = (boolean []) varAux;
-                if (aux[Integer.parseInt(ctx.exp().getText())]){
-                    return aux[Integer.parseInt(ctx.exp().getText())];
+                if (visitExp(ctx.exp()).getClass().getSimpleName().equals("Integer")){
+                    return aux[Integer.parseInt(visitExp(ctx.exp()).toString())];
+                } else {
+                    return aux[Integer.parseInt(vars.get(visitExp(ctx.exp()).toString()).toString())];
                 }
             } 
             // Verifica se o 'lvalue' é um array de caracteres e acessa o elemento do índice especificado
@@ -600,7 +659,7 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             }
             // Retorna o 'lvalue' como uma expressão de acesso a um array de outro tipo
             return ctx.lvalue().getText() + "[" + ctx.exp().getText() + "]";
-        } 
+        }
         // Se o contexto 'lvalue' e um identificador estão presentes, processa o acesso a um campo de um tipo
         else if (ctx.lvalue() != null && ctx.ID() != null) {
             if (vars.get(ctx.lvalue().getText()) != null){
@@ -706,7 +765,13 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         String varName = varAttr.substring(0, varAttr.indexOf("["));
         @SuppressWarnings("unchecked")
         HashMap<String,Object>[] auxArrayMap = (HashMap<String,Object>[]) vars.get(varName);
-        int index = Integer.parseInt(varAttr.substring(varAttr.indexOf("[") + 1, varAttr.indexOf("]")));
+        int index;
+        Object auxIndex = varAttr.substring(varAttr.indexOf("[") + 1, varAttr.indexOf("]"));
+        if(vars.get(auxIndex.toString()) == null){
+            index = Integer.parseInt(auxIndex.toString());
+        } else {
+            index = Integer.parseInt(vars.get(auxIndex).toString());
+        }
         String nameType = getKeyArray(auxArrayMap, index);
         @SuppressWarnings("unchecked")
         HashMap<String,Object> mapResult = (HashMap<String,Object>) auxArrayMap[index].get(nameType);
