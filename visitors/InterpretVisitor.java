@@ -7,23 +7,31 @@ import java.util.*;
 
 public class InterpretVisitor extends langBaseVisitor<Object> {
     // Pilha para manter o escopo atual das variáveis e funções
-    private Stack<HashMap<String,HashMap<String,Object>>> env = new Stack<>();
+    //private Stack<HashMap<String,Object>> env = new Stack<>();
+    private Stack<Object> env = new Stack<>();
     
     // HashMap para armazenar definições de funções, onde a chave é o nome da função e o valor é o escopo de variáveis daquela função
     private HashMap<String,HashMap<String,Object>> funcs = new HashMap<>();
-    
+
+    // Hashmap para armazenar os retornos das funções quando ocorrem chamadas de função
+    private HashMap<String,ArrayList<Object>> returnFuncs = new HashMap<>();
+
     // HashMap para armazenar variáveis no escopo atual
     private HashMap<String,Object> vars = new HashMap<>();
-    
-    // HashMap para armazenar declarações de variáveis
-    private HashMap<String,Object> declsVars = new HashMap<>();
 
     // Lista para armazenar os tipos de dados definidos no programa
     private ArrayList<Type> datas = new ArrayList<>();
 
+    // Chave com o nome da função atual
+    private String keyTest;
+
+    // Armazena o contexto raiz da árvore de análise sintática
+    private langParser.ProgContext rootContext;
+
     // Método principal que visita o nó "Prog" da árvore de análise sintática
     @Override
     public Object visitProg(langParser.ProgContext ctx) {
+        this.rootContext = ctx;
         // Verifica e processa declarações de dados se existirem
         if (ctx.data().size() > 0) {
             for (int i = 0; i < ctx.data().size(); i++) {
@@ -34,7 +42,10 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         // Verifica e processa funções se existirem
         if (ctx.func().size() > 0) {
             for (int i = 0; i < ctx.func().size(); i++) {
+                // Limpa o escopo atual de variáveis
+                vars.clear();
                 visitFunc(ctx.func(i));
+                env.pop();
             }
         }
         return null; 
@@ -62,23 +73,36 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
     public Object visitDecl(langParser.DeclContext ctx) {
         String attr = ctx.ID().getText();
         Type actData = datas.get(datas.size() - 1);
-        datas.remove(datas.size() - 1);
         actData.insertAttribute(attr);
-        datas.add(actData);
+        datas.set(datas.size() - 1, actData);
         return null; 
     }
 
     // Visita o nó "Func" e processa a definição de uma função
+    @SuppressWarnings("unchecked")
     @Override 
     public Object visitFunc(langParser.FuncContext ctx) {
-        // Limpa o escopo atual de variáveis
-        vars.clear();
+        keyTest = ctx.ID().getText();
+        env.push(keyTest);
 
-        // Adiciona a função atual no escopo de funções
-        funcs.put(ctx.ID().getText(), vars);
+        // Processa os parâmetros da função, caso tenha
+        if(ctx.params() != null){
+            visitParams(ctx.params());
+        }
+        //env.push(vars.clone());
+
+        funcs.put(ctx.ID().getText(), (HashMap<String,Object>)vars.clone());
+        // Processa a quantidade de retornos que a função terá
+        if(ctx.type().size() > 0){
+            ArrayList<Object> auxTypes = new ArrayList<>();
+            for (int i = 0; i < ctx.type().size(); i++){
+                auxTypes.add(ctx.type(i).getText());
+            }
+            returnFuncs.put(ctx.ID().toString(), auxTypes);
+        }
 
         // Empilha o escopo atual na pilha de escopos
-        env.push(funcs);
+        env.push(funcs.get(keyTest));
 
         // Processa comandos dentro da função
         if (ctx.cmd().size() > 0) {
@@ -86,13 +110,21 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 visitCmd(ctx.cmd(i));
             }
         }
+        env.pop();
         return null;
     }
 
-    // Visita o nó "Params" (parâmetros de funções), mas ainda não implementado
+    // Visita o nó "Params" (parâmetros de funções)
     @Override 
     public Object visitParams(langParser.ParamsContext ctx) { 
-        // Preciso implementar
+        // Recupera a chave da função no escopo atual
+        String key = keyTest;
+        if(funcs.get(key) == null){
+            for(int i = 0; i < ctx.ID().size(); i++){
+                vars.put(ctx.ID(i).toString(), null);
+                funcs.put(key, vars);
+            }
+        }
         return null;
     }
 
@@ -130,153 +162,178 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
     @Override 
     public Object visitCmd(langParser.CmdContext ctx) {
-        // Verifica se o comando é "print" e se há uma expressão para avaliar
-        if (ctx.getStart().getText().equals("print") && ctx.exp() != null) {
-            Object result = visitExp(ctx.exp(0));
-            if (vars.get(result.toString()) == null){
-                System.out.println(result);
-            } else {
-                System.out.println(vars.get(result.toString()));
-            }
-        } 
-        // Verifica se o comando é um bloco de comandos (delimitado por chaves "{...}")
-        else if (ctx.getStart().getText().equals("{")) {
-            // Se o bloco contém comandos, visita cada um recursivamente
-            if (ctx.cmd().size() > 0) {
-                for (int i = 0; i < ctx.cmd().size(); i++) {
-                    visitCmd(ctx.cmd(i));
-                }
-            }
-        } 
-        // Verifica se o comando é um "if" simples (sem 'else') e há apenas um comando a ser executado
-        else if (ctx.getStart().getText().equals("if") && ctx.cmd().size() == 1){
-            boolean result = (Boolean)visitExp(ctx.exp(0));
-            if (result) {
-                visitCmd(ctx.cmd(0));
-            }
-        } 
-        // Verifica se o comando é um "if-else" com dois comandos (um para o "if" e outro para o "else")
-        else if (ctx.getStart().getText().equals("if") && ctx.cmd().size() == 2) {
-            boolean result = (Boolean)visitExp(ctx.exp(0));
-            if (result) {
-                visitCmd(ctx.cmd(0));
-            } else {
-                visitCmd(ctx.cmd(1));
-            }
-        } 
-        // Verifica se o comando é "iterate" (um laço de repetição)
-        else if (ctx.getStart().getText().equals("iterate") && ctx.exp() != null) {
-            Object exp = visitExp(ctx.exp(0));
-            if (vars.get(exp.toString()) == null){
-                int auxExp = Integer.parseInt(exp.toString());
-                for(int i = 0; i < auxExp; i++){
-                    visitCmd(ctx.cmd(0));
-                }
-            } else {
-                String auxExp = vars.get(exp.toString()).toString();
-                for(int i = 0; i < Integer.parseInt(auxExp); i++){
-                    visitCmd(ctx.cmd(0));
-                }
-            }
-        } 
-        // Verifica se o comando é "read" (leitura de entrada do usuário) e lida com diferentes tipos de valores de entrada
-        else if (ctx.getStart().getText().equals("read") && ctx.lvalue() != null) {
-            String varName = ctx.lvalue(0).getText();
-            // Se o nome da variável contém '.' e '[]', trata como um acesso a um array de um tipo
-            if (varName.contains(".") && varName.contains("[")){
-                String key  = getKey(funcs);
-                Object value = receivesUserInput();
-                validateSaveArrayTypes(varName, key, value);
-            } 
-            // Se o nome da variável contém '.', trata como um acesso a um atributo de um tipo
-            else if (varName.contains(".")) {
-                Object value = receivesUserInput();
-                validateSaveTypes(varName, value);
-            } 
-            // Caso contrário, trata como uma variável simples
-            else {
-                Object value = receivesUserInput();
-                String key  = getKey(funcs);
-                vars.put(varName, value);
-                funcs.put(key, vars);
-                env.pop();
-                env.push(funcs);
-            }
-        } 
-        // Atribuição de valor a variáveis e tratamento de diferentes tipos de valores
-        else if (ctx.lvalue() != null && ctx.exp() != null) {
-            String left = ctx.lvalue(0).getText(); // Nome da variável à esquerda
-            Object right = visitExp(ctx.exp(0)); // Valor da expressão à direita
-            String key = getKey(funcs); // Obtém a chave do ambiente de funções
-            
-            // Se o nome da variável contém '[]', trata como um acesso a array
-            if (left.contains("[")) {
-                String keyVar = left.substring(0, left.indexOf("["));
-                int index = Integer.parseInt(left.substring(left.indexOf("[") + 1, left.indexOf("]")));
-                Object varAux = vars.get(keyVar);
-                // Tratamento específico para arrays de diferentes tipos (int, float, boolean, char)
-                if (varAux instanceof int[]) {
-                    int[] vectAux = (int[]) varAux;
-                    vectAux[index] = Integer.parseInt(right.toString());
-                    vars.put(keyVar, vectAux);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
-                } else if (varAux instanceof float[]) {
-                    float[] vectAux = (float[]) varAux;
-                    vectAux[index] = Float.parseFloat(right.toString());
-                    vars.put(keyVar, vectAux);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
-                } else if (varAux instanceof boolean[]) {
-                    boolean[] vectAux = (boolean[]) varAux;
-                    vectAux[index] = Boolean.parseBoolean(right.toString());
-                    vars.put(keyVar, vectAux);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
-                } else if (varAux instanceof char[]) {
-                    char[] vectAux = (char[]) varAux;
-                    vectAux[index] = right.toString().charAt(0);
-                    vars.put(keyVar, vectAux);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
+        if(funcs.containsKey("main") || functionWithoutNullVars(keyTest)){
+            // Verifica se o comando é "print" e se há uma expressão para avaliar
+            if (ctx.getStart().getText().equals("print") && ctx.exp() != null) {
+                Object result = visitExp(ctx.exp(0));
+                if (vars.get(result.toString()) == null){
+                    System.out.println(result);
                 } else {
-                    validateSaveArrayTypes(left, key, right); // Valida e salva arrays de tipo
+                    System.out.println(vars.get(result.toString()));
                 }
             } 
-            // Se o nome da variável contém '.', trata como um acesso a um atributo de um tipo
-            else if (left.contains(".")) {
-                validateSaveTypes(left, right); // Valida e salva tipos
-            } 
-            // Caso contrário, trata como uma variável simples ou o instanciamento de um novo tipo ou array de tipo
-            else {
-                if (right != null && searchType(right.toString()) != null){
-                    Type auxData = searchType(right.toString());
-                    HashMap<String,Object> attr = new HashMap<>();
-                    for (int i = 0; i < auxData.getAttributes().size(); i++){
-                        attr.put(auxData.getAttributes().get(i), null);
+            // Verifica se o comando é um bloco de comandos (delimitado por chaves "{...}")
+            else if (ctx.getStart().getText().equals("{")) {
+                // Se o bloco contém comandos, visita cada um recursivamente
+                if (ctx.cmd().size() > 0) {
+                    for (int i = 0; i < ctx.cmd().size(); i++) {
+                        visitCmd(ctx.cmd(i));
                     }
-                    vars.put(left, attr);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
-                } else if (right instanceof HashMap<?,?>[]){
-                    @SuppressWarnings("unchecked")
-                    HashMap<String,Object>[] auxRight = (HashMap<String,Object>[]) right;
-                    vars.put(left, auxRight);
-                    funcs.put(key, vars);
-                    env.pop();
-                    env.push(funcs);
+                }
+            } 
+            // Verifica se o comando é um "if" simples (sem 'else') e há apenas um comando a ser executado
+            else if (ctx.getStart().getText().equals("if") && ctx.cmd().size() == 1){
+                boolean result = (Boolean)visitExp(ctx.exp(0));
+                if (result) {
+                    visitCmd(ctx.cmd(0));
+                }
+            } 
+            // Verifica se o comando é um "if-else" com dois comandos (um para o "if" e outro para o "else")
+            else if (ctx.getStart().getText().equals("if") && ctx.cmd().size() == 2) {
+                boolean result = (Boolean)visitExp(ctx.exp(0));
+                if (result) {
+                    visitCmd(ctx.cmd(0));
                 } else {
-                    vars.put(left, right);
-                    funcs.put(key, vars);
+                    visitCmd(ctx.cmd(1));
+                }
+            } 
+            // Verifica se o comando é "iterate" (um laço de repetição)
+            else if (ctx.getStart().getText().equals("iterate") && ctx.exp() != null) {
+                Object exp = visitExp(ctx.exp(0));
+                if (vars.get(exp.toString()) == null){
+                    int auxExp = Integer.parseInt(exp.toString());
+                    for(int i = 0; i < auxExp; i++){
+                        visitCmd(ctx.cmd(0));
+                    }
+                } else {
+                    String auxExp = vars.get(exp.toString()).toString();
+                    for(int i = 0; i < Integer.parseInt(auxExp); i++){
+                        visitCmd(ctx.cmd(0));
+                    }
+                }
+            } 
+            // Verifica se o comando é "read" (leitura de entrada do usuário) e lida com diferentes tipos de valores de entrada
+            else if (ctx.getStart().getText().equals("read") && ctx.lvalue() != null) {
+                String varName = ctx.lvalue(0).getText();
+                // Se o nome da variável contém '.' e '[]', trata como um acesso a um array de um tipo
+                if (varName.contains(".") && varName.contains("[")){
+                    String key  = keyTest;
+                    Object value = receivesUserInput();
+                    validateSaveArrayTypes(varName, key, value);
+                } 
+                // Se o nome da variável contém '.', trata como um acesso a um atributo de um tipo
+                else if (varName.contains(".")) {
+                    Object value = receivesUserInput();
+                    validateSaveTypes(varName, value);
+                } 
+                // Caso contrário, trata como uma variável simples
+                else {
+                    Object value = receivesUserInput();
+                    String key  = keyTest;
+                    vars.put(varName, value);
+                    funcs.put(key, (HashMap<String,Object>)vars.clone());
                     env.pop();
-                    env.push(funcs);
+                    env.push(funcs.get(keyTest));
+                }
+            }
+            else if (ctx.getStart().getText().equals("return")){
+                ArrayList<Object> returns = new ArrayList<>();
+                for (int i = 0; i < ctx.exp().size(); i++){
+                    Object nameExp = visitExp(ctx.exp(i));
+                    if(funcs.get(keyTest).containsKey(nameExp)){
+                        returns.add(funcs.get(keyTest).get(nameExp));
+                    } else {
+                        returns.add(visitExp(ctx.exp(i)));
+                    }
+                }
+                returnFuncs.put(keyTest, returns);
+                env.pop();
+            }
+            // Atribuição de valor a variáveis e tratamento de diferentes tipos de valores
+            else if (ctx.lvalue() != null && ctx.exp() != null && ctx.ID() == null) {
+                String left = ctx.lvalue(0).getText(); // Nome da variável à esquerda
+                Object right = visitExp(ctx.exp(0)); // Valor da expressão à direita
+                String key = keyTest; // Obtém a chave do ambiente de funções
+                
+                // Se o nome da variável contém '[]', trata como um acesso a array
+                if (left.contains("[")) {
+                    String keyVar = left.substring(0, left.indexOf("["));
+                    int index = Integer.parseInt(left.substring(left.indexOf("[") + 1, left.indexOf("]")));
+                    Object varAux = vars.get(keyVar);
+                    // Tratamento específico para arrays de diferentes tipos (int, float, boolean, char)
+                    if (varAux instanceof int[]) {
+                        int[] vectAux = (int[]) varAux;
+                        vectAux[index] = Integer.parseInt(right.toString());
+                        vars.put(keyVar, vectAux);
+                        funcs.put(key, vars);
+                    } else if (varAux instanceof float[]) {
+                        float[] vectAux = (float[]) varAux;
+                        vectAux[index] = Float.parseFloat(right.toString());
+                        vars.put(keyVar, vectAux);
+                        funcs.put(key, vars);
+                    } else if (varAux instanceof boolean[]) {
+                        boolean[] vectAux = (boolean[]) varAux;
+                        vectAux[index] = Boolean.parseBoolean(right.toString());
+                        vars.put(keyVar, vectAux);
+                        funcs.put(key, vars);
+                    } else if (varAux instanceof char[]) {
+                        char[] vectAux = (char[]) varAux;
+                        vectAux[index] = right.toString().charAt(0);
+                        vars.put(keyVar, vectAux);
+                        funcs.put(key, vars);
+                    } else {
+                        validateSaveArrayTypes(left, key, right); // Valida e salva arrays de tipo
+                    }
+                } 
+                // Se o nome da variável contém '.', trata como um acesso a um atributo de um tipo
+                else if (left.contains(".")) {
+                    validateSaveTypes(left, right); // Valida e salva tipos
+                } 
+                // Caso contrário, trata como uma variável simples ou o instanciamento de um novo tipo ou array de tipo
+                else {
+                    if (right != null && searchType(right.toString()) != null){
+                        Type auxData = searchType(right.toString());
+                        HashMap<String,Object> attr = new HashMap<>();
+                        for (int i = 0; i < auxData.getAttributes().size(); i++){
+                            attr.put(auxData.getAttributes().get(i), null);
+                        }
+                        vars.put(left, attr);
+                        funcs.put(key, vars);
+                    } else if (right instanceof HashMap<?,?>[]){
+                        @SuppressWarnings("unchecked")
+                        HashMap<String,Object>[] auxRight = (HashMap<String,Object>[]) right;
+                        vars.put(left, auxRight);
+                        funcs.put(key, vars);
+                    } else {
+                        vars.put(left, right);
+                        funcs.put(key, (HashMap<String,Object>)vars.clone());
+                    }
+                }
+            } else if (ctx.ID() != null) {
+                env.set(env.size() - 1, (HashMap<String,Object>)vars.clone());
+                if (funcs.containsKey(ctx.ID().toString())){
+                    ArrayList<Object> auxParams = new ArrayList<>();
+                    auxParams = (ArrayList<Object>) visitExps(ctx.exps());
+                    for (int i = 0; i < auxParams.size(); i++){
+                        String keyParams = funcs.get(ctx.ID().toString()).keySet().iterator().next();
+                        HashMap<String,Object> newValParam = funcs.get(ctx.ID().toString());
+                        newValParam.put(keyParams, vars.get(auxParams.get(i)));
+                        funcs.put(ctx.ID().toString(), (HashMap<String,Object>)newValParam.clone());
+                    }
+                    vars.clear();
+                    vars = funcs.get(ctx.ID().toString());
+                    visitFunc(findFunctionContext(ctx.ID().toString()));
+                    vars = (HashMap<String, Object>) env.elementAt(env.size() - 1);
+                    keyTest = (String)env.elementAt(env.size() - 2);
+                    if (ctx.lvalue().size() > 0){
+                        ArrayList<Object> arrayAux = returnFuncs.get(ctx.ID().toString());
+                        for (int i = 0; i < ctx.lvalue().size(); i++){
+                            vars.put(ctx.lvalue(i).getText(), arrayAux.get(i));
+                        }
+                    }
                 }
             }
         }
@@ -375,7 +432,6 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             if (vars.get(right.toString()) != null){
                 right = vars.get(right.toString());
             }
-    
             // Realiza operações de multiplicação, divisão ou módulo
             if (ctx.getChildCount() > 1) {
                 if (ctx.getChild(1).getText().equals("*")) {
@@ -428,7 +484,8 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         return null;
     }
 
-	@Override 
+	@SuppressWarnings("unchecked")
+    @Override 
     public Object visitPexp(langParser.PexpContext ctx) { 
         if (ctx.lvalue() != null){
             return visitLvalue(ctx.lvalue());
@@ -480,7 +537,25 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 }
             }
         } else if (ctx.ID() != null) {
-            return null;
+            env.set(env.size() - 1, (HashMap<String,Object>)vars.clone());
+            if (funcs.containsKey(ctx.ID().toString())){
+                ArrayList<Object> auxParams = new ArrayList<>();
+                auxParams = (ArrayList<Object>) visitExps(ctx.exps());
+                for (int i = 0; i < auxParams.size(); i++){
+                    String keyParams = funcs.get(ctx.ID().toString()).keySet().iterator().next();
+                    HashMap<String,Object> newValParam = funcs.get(ctx.ID().toString());
+                    newValParam.put(keyParams, vars.get(auxParams.get(i)));
+                    funcs.put(ctx.ID().toString(), (HashMap<String,Object>)newValParam.clone());
+                }
+                vars.clear();
+                vars = funcs.get(ctx.ID().toString());
+                visitFunc(findFunctionContext(ctx.ID().toString()));
+                vars = (HashMap<String, Object>) env.elementAt(env.size() - 1);
+                keyTest = (String)env.elementAt(env.size() - 2);
+                ArrayList<Object> arrayAux = returnFuncs.get(ctx.ID().toString());
+                Object value =  arrayAux.get(Integer.parseInt(ctx.exp().getText()));
+                return value;
+            }
         }
         return null;
     }
@@ -547,7 +622,7 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 // Obtém o índice do array a partir do 'lvalue'
                 int index = Integer.parseInt(ctx.lvalue().getText().substring(ctx.lvalue().getText().indexOf("[") + 1, ctx.lvalue().getText().indexOf("]")));
                 
-                // Obtém a chave correspondente no array de mapas
+                // Obtém a chave correspondente no array de tipos
                 String key = getKeyArray(auxArrayMap, index);
                 
                 // Recupera o mapa no índice especificado e retorna o valor associado ao identificador
@@ -561,7 +636,7 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
     
     @Override 
     public Object visitExps(langParser.ExpsContext ctx) { 
-        List<Object> results = new ArrayList<>();
+        ArrayList<Object> results = new ArrayList<>();
         
         // Verifica se a primeira expressão não é nula e a visita.
         if (ctx.exp(0) != null) {
@@ -572,16 +647,7 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         for (int i = 1; i < ctx.exp().size(); i++) {
             results.add(visitExp(ctx.exp(i)));
         }
-        
         return results;
-    }
-
-    // Função para retornar a chave da Hash 'funcs' (será útil na manipulação da Hash e pilha)
-    public String getKey(HashMap<String, HashMap<String, Object>> map) {
-        if (map != null && !map.isEmpty()) {
-            return map.keySet().iterator().next();
-        }
-        return null;
     }
 
     // Função para consultar a chave de um vetor de hashmaps
@@ -621,21 +687,21 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
     }
 
     // Função para validar e salvar valores usando tipos
+    @SuppressWarnings("unchecked")
     public void validateSaveTypes(String varDecl, Object value){
         String [] auxVarDecl = varDecl.split("\\.");
         String varName = auxVarDecl[0];
         String declName = auxVarDecl[1];
-        String key = getKey(funcs);
+        String key = keyTest;
         @SuppressWarnings("unchecked")
         HashMap<String,Object> auxAtt = (HashMap<String,Object>)vars.get(varName);
         auxAtt.put(declName, value);
         vars.put(varName, auxAtt);
-        funcs.put(key, vars);
-        env.pop();
-        env.push(funcs);
+        funcs.put(key, (HashMap<String,Object>)vars.clone());
     }
 
     // Função para validar e salvar valores usando vetores de tipos
+    @SuppressWarnings("unchecked")
     public void validateSaveArrayTypes(String varAttr, String key, Object value){
         String varName = varAttr.substring(0, varAttr.indexOf("["));
         @SuppressWarnings("unchecked")
@@ -645,12 +711,12 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
         @SuppressWarnings("unchecked")
         HashMap<String,Object> mapResult = (HashMap<String,Object>) auxArrayMap[index].get(nameType);
         String attr = varAttr.substring(varAttr.indexOf(".") + 1, varAttr.length());
-        mapResult.put(attr, value);
-        auxArrayMap[index].put(nameType, mapResult);
-        vars.put(varName, auxArrayMap);
-        funcs.put(key, vars);
-        env.pop();
-        env.push(funcs);
+        if (mapResult.containsKey(attr)){
+            mapResult.put(attr, value);
+            auxArrayMap[index].put(nameType, mapResult);
+            vars.put(varName, auxArrayMap);
+            funcs.put(key, (HashMap<String,Object>)vars.clone());
+        }
     }
 
     // Procura e retorna um tipo a partir do seu nome
@@ -663,5 +729,26 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
             }
         }
         return null;
+    }
+
+    // Verifica se o HashMap de variáveis do escopo de uma função não possui elementos nulos
+    public Boolean functionWithoutNullVars(String functionName){
+        HashMap<String,Object> auxVars = funcs.get(functionName);
+        for (Map.Entry<String,Object> entry: auxVars.entrySet()){
+            if(entry.getValue() == null){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Método auxiliar para localizar o contexto de uma função na árvore de análise sintática
+    private langParser.FuncContext findFunctionContext(String funcName) {
+        for (langParser.FuncContext funcCtx : rootContext.func()) {
+            if (funcCtx.ID().getText().equals(funcName)) {
+                return funcCtx;
+            }
+        }
+        throw new RuntimeException("Contexto para a função " + funcName + " não encontrado.");
     }
 }
