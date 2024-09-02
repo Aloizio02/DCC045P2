@@ -45,7 +45,9 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 // Limpa o escopo atual de variáveis
                 vars.clear();
                 visitFunc(ctx.func(i));
-                env.pop();
+                if (!env.isEmpty()){
+                    env.pop();
+                }
             }
         }
         return null; 
@@ -103,7 +105,7 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
 
         // Empilha o escopo atual na pilha de escopos
         env.push(funcs.get(keyTest));
-
+        
         // Processa comandos dentro da função
         if (ctx.cmd().size() > 0) {
             for (int i = 0; i < ctx.cmd().size(); i++){
@@ -323,10 +325,15 @@ public class InterpretVisitor extends langBaseVisitor<Object> {
                 if (funcs.containsKey(ctx.ID().toString())){
                     ArrayList<Object> auxParams = new ArrayList<>();
                     auxParams = (ArrayList<Object>) visitExps(ctx.exps());
+
+                    List<String> keyParams = new ArrayList<>();
+                    funcs.get(ctx.ID().toString()).forEach((key, value) ->{
+                        keyParams.add(key);
+                    });
                     for (int i = 0; i < auxParams.size(); i++){
-                        String keyParams = funcs.get(ctx.ID().toString()).keySet().iterator().next();
                         HashMap<String,Object> newValParam = funcs.get(ctx.ID().toString());
-                        newValParam.put(keyParams, vars.get(auxParams.get(i)));
+                        String aux = keyParams.size() - (i + 1) >= 0 ? keyParams.get(keyParams.size() - (i+1)) : null;
+                        newValParam.put(aux, auxParams.get(i));
                         funcs.put(ctx.ID().toString(), (HashMap<String,Object>)newValParam.clone());
                     }
                     vars.clear();
